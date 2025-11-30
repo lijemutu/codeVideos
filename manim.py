@@ -10,27 +10,38 @@ import sys
 from typing import List, Dict, Optional
 from pathlib import Path
 from manimlib import *
+from pygments import lex
+from pygments.lexers import get_lexer_by_name
+from pygments.token import Token
 
 
 class MarkdownCodeParser:
     """Parses markdown files with special annotations for code transformations"""
     
     @staticmethod
-    def parse_markdown(content: str) -> List[Dict]:
+    def parse_markdown(content: str) -> Dict:
         """
-        Parse markdown content with code blocks annotated with transformation metadata
+        Parse markdown content with code blocks and an optional title.
         
         Expected format:
+        # My Awesome Title
         ```csharp @step1 @highlight[var,result]
         var result = list.Where(x => x > 0);
         ```
+        ```@step2
+        Plain text explanation here
+        ```
         """
+        title_match = re.search(r"^#\s+(.*)", content, re.MULTILINE)
+        title = title_match.group(1).strip() if title_match else None
+        
         code_blocks = []
-        pattern = r'```(\w+)\s+(.*?)\n(.*?)```'
+        # Updated pattern to make language optional
+        pattern = r'```(\w*)\s*(.*?)\n(.*?)```'
         matches = re.finditer(pattern, content, re.DOTALL)
         
         for match in matches:
-            language = match.group(1)
+            language = match.group(1) if match.group(1) else None
             annotations = match.group(2)
             code = match.group(3).strip()
             
@@ -40,7 +51,7 @@ class MarkdownCodeParser:
             isolate_match = re.search(r'@isolate\[(.*?)\]', annotations)
             
             code_blocks.append({
-                'language': language,
+                'language': language,  # Can be None for plain text
                 'code': code,
                 'step': int(step_match.group(1)) if step_match else 0,
                 'highlights': highlight_match.group(1).split(',') if highlight_match else [],
@@ -48,7 +59,7 @@ class MarkdownCodeParser:
                 'isolate': isolate_match.group(1).split(',') if isolate_match else []
             })
         
-        return sorted(code_blocks, key=lambda x: x['step'])
+        return {"title": title, "code_blocks": sorted(code_blocks, key=lambda x: x['step'])}
 
 
 class MarkdownCodeScene(Scene):
@@ -116,7 +127,14 @@ class MarkdownCodeScene(Scene):
         
         # Parse the markdown
         parser = MarkdownCodeParser()
-        code_blocks = parser.parse_markdown(markdown_content)
+        parsed_data = parser.parse_markdown(markdown_content)
+        title = parsed_data.get("title")
+        code_blocks = parsed_data.get("code_blocks", [])
+        
+        title_mob = None
+        if title:
+            title_mob = Text(title).to_edge(UP)
+            self.play(Write(title_mob))
         
         if not code_blocks:
             error = Text("No code blocks found in markdown", color=RED, font_size=24)
@@ -124,25 +142,158 @@ class MarkdownCodeScene(Scene):
             self.wait(2)
             return
         
-        # Create text mobjects for each code block
+        # Manually create syntax-highlighted code from basic Text objects
+        font_size = 24
+        # A more complete style map based on VS Code's "Dark+" theme
+        # FIXED: Using color_to_rgb or direct hex colors that ManimGL understands
+        style_map = {
+            Token.Comment:                   "#6A9955",
+            Token.Comment.Single:            "#6A9955",
+            Token.Comment.Multiline:         "#6A9955",
+            Token.Keyword:                   "#569CD6",
+            Token.Keyword.Constant:          "#569CD6",
+            Token.Keyword.Declaration:       "#569CD6",
+            Token.Keyword.Namespace:         "#569CD6",
+            Token.Keyword.Type:              "#569CD6",
+            Token.Name:                      "#9CDCFE",
+            Token.Name.Class:                "#4EC9B0",
+            Token.Name.Function:             "#DCDCAA",
+            Token.Name.Builtin:              "#569CD6",
+            Token.Name.Variable:             "#9CDCFE",
+            Token.Name.Attribute:            "#DCDCAA",
+            Token.Name.Tag:                  "#569CD6",
+            Token.Name.Decorator:            "#DCDCAA",
+            Token.String:                    "#CE9178",
+            Token.String.Double:             "#CE9178",
+            Token.String.Single:             "#CE9178",
+            Token.Number:                    "#B5CEA8",
+            Token.Number.Integer:            "#B5CEA8",
+            Token.Number.Float:              "#B5CEA8",
+            Token.Operator:                  "#D4D4D4",
+            Token.Operator.Word:             "#569CD6",
+            Token.Punctuation:               "#D4D4D4",
+            Token.Generic.Heading:           "#FFFFFF",
+            Token.Generic.Subheading:        "#FFFFFF",
+            Token.Generic.Emph:              "#D4D4D4",
+            Token.Generic.Strong:            "#D4D4D4",
+            Token.Error:                     "#F44747",
+            Token.Text:                      "#D4D4D4",
+        }
+
+        # Common LINQ and C# extension methods to highlight
+        linq_methods = {
+            'Where', 'Select', 'SelectMany', 'OrderBy', 'OrderByDescending',
+            'ThenBy', 'ThenByDescending', 'GroupBy', 'Join', 'GroupJoin',
+            'First', 'FirstOrDefault', 'Last', 'LastOrDefault', 'Single',
+            'SingleOrDefault', 'Any', 'All', 'Count', 'Sum', 'Average',
+            'Min', 'Max', 'Take', 'Skip', 'TakeWhile', 'SkipWhile',
+            'Distinct', 'Union', 'Intersect', 'Except', 'Concat',
+            'Aggregate', 'ToList', 'ToArray', 'ToDictionary', 'ToLookup',
+            'AsEnumerable', 'AsQueryable', 'Cast', 'OfType', 'Zip',
+            'Contains', 'ElementAt', 'ElementAtOrDefault', 'DefaultIfEmpty',
+            'Range', 'Repeat', 'Empty', 'Reverse'
+        }
+
+        def get_color_for_token(ttype, tvalue):
+            """Get color for a token type, checking parent types if needed"""
+            # Special handling for LINQ methods in C#
+            if block['language'].lower() in ['csharp', 'c#', 'cs']:
+                if tvalue in linq_methods:
+                    return "#DCDCAA"  # Function color (yellow)
+            
+            # First check exact match
+            if ttype in style_map:
+                return style_map[ttype]
+            
+            # Walk up the token type hierarchy
+            current = ttype
+            while current.parent is not None:
+                current = current.parent
+                if current in style_map:
+                    return style_map[current]
+            
+            # Default color
+            return "#D4D4D4"
+
         code_mobs = []
         for block in code_blocks:
-            code = Text(
-                block['code'],
-                font="Monospace",
-                font_size=24,
-                color=WHITE
-            )
+            # Check if this is plain text (no language specified)
+            if not block['language']:
+                # Create simple text display for plain text blocks
+                text_lines = block['code'].split('\n')
+                text_group = VGroup()
+                
+                for line in text_lines:
+                    if line.strip():  # Skip empty lines
+                        line_text = Text(line, font_size=font_size, color=WHITE)
+                        text_group.add(line_text)
+                
+                text_group.arrange(DOWN, aligned_edge=LEFT, buff=0.2)
+                text_group.move_to(ORIGIN)
+                code_mobs.append(text_group)
+                continue
+            
+            # Process code blocks with syntax highlighting
+            try:
+                lexer = get_lexer_by_name(block['language'], stripall=True)
+            except:
+                lexer = get_lexer_by_name('text', stripall=True)
+
+            tokens = list(lex(block['code'], lexer))
+            
+            # Debug: Print first few tokens to see what we're getting
+            # print(f"\n=== Lexing {block['language']} code ===")
+            for i, (ttype, tvalue) in enumerate(tokens[:15]):
+                color = get_color_for_token(ttype, tvalue)
+                # print(f"Token {i}: {ttype} = '{tvalue}' -> color: {color}")
+            
+            lines = VGroup()
+            current_line = VGroup()
+
+            for ttype, tvalue in tokens:
+                # Get the appropriate color for this token
+                color = get_color_for_token(ttype, tvalue)
+
+                if "\n" in tvalue:
+                    parts = tvalue.split("\n")
+                    for i, part in enumerate(parts):
+                        if part:
+                            # FIXED: Ensure color is applied correctly
+                            text_mob = Text(part, font="Monospace", font_size=font_size)
+                            text_mob.set_color(color)
+                            current_line.add(text_mob)
+                        if i < len(parts) - 1:
+                            if len(current_line.submobjects) > 0:
+                                current_line.arrange(RIGHT, buff=0.08, aligned_edge=DOWN)
+                            lines.add(current_line)
+                            current_line = VGroup()
+                else:
+                    if tvalue:
+                        # FIXED: Ensure color is applied correctly
+                        text_mob = Text(tvalue, font="Monospace", font_size=font_size)
+                        text_mob.set_color(color)
+                        current_line.add(text_mob)
+
+            if len(current_line.submobjects) > 0:
+                current_line.arrange(RIGHT, buff=0.08, aligned_edge=DOWN)
+            lines.add(current_line)
+            
+            code = lines.arrange(DOWN, aligned_edge=LEFT, buff=0.15)
             code.move_to(ORIGIN)
             code_mobs.append(code)
         
         # Animate the code blocks
         if code_mobs:
-            self.play(FadeIn(code_mobs[0]))
+            current_code = code_mobs[0]
+            self.play(Write(current_code))
             self.wait(1)
             
-            for i in range(len(code_mobs) - 1):
-                self.play(Transform(code_mobs[0], code_mobs[i + 1]), run_time=2)
+            for next_code in code_mobs[1:]:
+                self.play(ReplacementTransform(current_code, next_code), run_time=1.5)
                 self.wait(1)
+                current_code = next_code
             
-            self.play(FadeOut(code_mobs[0]))
+            if title_mob:
+                self.play(FadeOut(current_code), FadeOut(title_mob))
+            else:
+                self.play(FadeOut(current_code))
