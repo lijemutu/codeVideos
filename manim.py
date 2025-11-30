@@ -286,11 +286,11 @@ class MarkdownCodeScene(Scene):
         if code_mobs:
             current_code = code_mobs[0]
             self.play(Write(current_code))
-            self.wait(1)
+            self.wait(1.5)
             
             for next_code in code_mobs[1:]:
                 self.play(ReplacementTransform(current_code, next_code), run_time=1.5)
-                self.wait(1)
+                self.wait(1.5)
                 current_code = next_code
             
             if title_mob:

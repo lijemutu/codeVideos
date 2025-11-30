@@ -1,16 +1,14 @@
 # Refactoring EF Core to Fix an N+1 Query
 
-A common performance issue when using an ORM like Entity Framework Core is the "N+1 query" problem. This happens when you query for a list of entities (the "1" query) and then loop through them, triggering a new query for related data for each of the "N" entities.
-
-Let's assume we have these two simple EF Core models for our examples:
-```csharp
+```csharp @step1
 public class Author
 {
     public int Id { get; set; }
     public string Name { get; set; }
     public List<Book> Books { get; set; } = new();
 }
-
+```
+```csharp @step1
 public class Book
 {
     public int Id { get; set; }
@@ -20,46 +18,60 @@ public class Book
 }
 ```
 
----
-### The Problem: The N+1 Query
+``` @step2
+The "N+1 query" problem happens when you make one query to get a list of items (the "1")
+```
+``` @step2
+and then make N additional queries to fetch related data for each of those N items.
+```
+``` @step2
+This is very inefficient and can severely degrade performance.
+```
 
-Here is a typical example of code that causes an N+1 query. We want to get all authors and print the title of one of their books.
-
-```csharp @step1
-// BAD: This causes an N+1 query.
+```csharp @step3
 var authors = context.Authors.ToList();
 
 foreach (var author in authors)
 {
-    // This access to author.Books triggers a NEW query for EACH author!
     var firstBookTitle = author.Books.FirstOrDefault()?.Title ?? "No Books";
     Console.WriteLine($"- {author.Name} ({firstBookTitle})");
 }
 ```
 
-This code looks simple, but it's very inefficient. It executes:
-1.  **One query** to fetch all authors (`context.Authors.ToList()`).
-2.  **N additional queries** inside the loop, one for each author, to fetch their books (`author.Books`).
+``` @step4
+If you have 50 authors, this code runs:
+```
 
-If you have 50 authors, this code runs 51 queries against your database.
+``` @step4
+1 query for all authors
++ 50 queries (1 for each author's books)
+= 51 total database queries!
+```
 
----
-### The Solution: Eager Loading
+``` @step4
+This can easily overwhelm your database.
+```
 
-The fix is to tell EF Core to load the related data ahead of time in a single query. This is called "eager loading," and you do it with the `.Include()` method.
-
-```csharp @step2
-// GOOD: This executes a single query.
+```csharp @step5
 var authors = context.Authors
-    .Include(author => author.Books) // Eagerly load books in the same query
-    .ToList();
+    .Include(author => author.Books) 
+    .ToList(); 
 
 foreach (var author in authors)
 {
-    // NO query here! The book data is already in memory.
     var firstBookTitle = author.Books.FirstOrDefault()?.Title ?? "No Books";
     Console.WriteLine($"- {author.Name} ({firstBookTitle})");
 }
 ```
 
-By adding `.Include(author => author.Books)`, we instruct EF Core to generate a more complex SQL query that joins `Authors` and `Books` and fetches all the required data at once. The loop can then run without making any extra database calls, reducing 51 queries to just 1.
+``` @step6
+By using `.Include()`, we reduce 51 queries down to just 1.
+```
+
+``` @step6
+This significantly improves performance by minimizing database round-trips.
+```
+
+``` @step6
+Always consider eager loading related data when you know you'll need it.
+```
