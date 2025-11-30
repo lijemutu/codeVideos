@@ -49,11 +49,17 @@ class MarkdownCodeParser:
             highlight_match = re.search(r'@highlight\[(.*?)\]', annotations)
             transform_match = re.search(r'@transform\[(.*?)\]', annotations)
             isolate_match = re.search(r'@isolate\[(.*?)\]', annotations)
+            wait_match = re.search(r'@wait\[([\d.]+)\]', annotations)
+            transform_flag = re.search(r'@transform', annotations)
+            write_flag = re.search(r'@write', annotations)
             
             code_blocks.append({
                 'language': language,  # Can be None for plain text
                 'code': code,
                 'step': int(step_match.group(1)) if step_match else 0,
+                'wait': float(wait_match.group(1)) if wait_match else 1.5,
+                'use_transform': bool(transform_flag),
+                'use_write': bool(write_flag),
                 'highlights': highlight_match.group(1).split(',') if highlight_match else [],
                 'transforms': dict(t.split('->') for t in transform_match.group(1).split(',')) if transform_match else {},
                 'isolate': isolate_match.group(1).split(',') if isolate_match else []
@@ -284,15 +290,37 @@ class MarkdownCodeScene(Scene):
         
         # Animate the code blocks
         if code_mobs:
+            # Animate the first slide's appearance
             current_code = code_mobs[0]
-            self.play(Write(current_code))
-            self.wait(1.5)
-            
-            for next_code in code_mobs[1:]:
-                self.play(ReplacementTransform(current_code, next_code), run_time=1.5)
-                self.wait(1.5)
+            if code_blocks[0].get('use_write', False):
+                self.play(Write(current_code), run_time=2)
+            else:
+                self.play(FadeIn(current_code)) # Default to FadeIn
+            self.wait(code_blocks[0].get('wait', 1.5))
+
+            # Animate transitions for subsequent slides
+            for i in range(1, len(code_mobs)):
+                next_code = code_mobs[i]
+                
+                # Check for @write first (highest priority)
+                if code_blocks[i].get('use_write', False):
+                    self.play(FadeOut(current_code))
+                    self.play(Write(next_code), run_time=2)
+                
+                # Then check for @transform
+                elif code_blocks[i].get('use_transform', False):
+                    self.play(ReplacementTransform(current_code, next_code), run_time=1.5)
+                
+                # Default to cross-fade
+                else:
+                    self.play(FadeOut(current_code), FadeIn(next_code), run_time=0.75)
+                
+                # Wait for the duration specified for the new slide
+                self.wait(code_blocks[i].get('wait', 1.5))
+
                 current_code = next_code
             
+            # Fade out the final slide
             if title_mob:
                 self.play(FadeOut(current_code), FadeOut(title_mob))
             else:
