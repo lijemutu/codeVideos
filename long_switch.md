@@ -14,7 +14,7 @@ They open the `PaymentProcessor` file and find... this.
 A wild switch statement appears!
 ```
 
-```csharp @step2 @write @wait[6]
+```csharp @step2 @wait[6]
 public decimal CalculateFee(Order order)
 {
     decimal fee = 0;
@@ -27,11 +27,7 @@ public decimal CalculateFee(Order order)
             fee = order.Amount * 0.03m;
             if (order.IsInternational) fee += order.Amount * 0.015m;
             break;
-            // ...
             // ... Google, applepay, banktransfer ...
-            // ...
-        default:
-            throw new NotSupportedException("Payment method not supported.");
     }
     return fee;
 }
@@ -42,16 +38,16 @@ To add the new 'GiftCard' method,
 the developer has to carefully scroll and find the right place to add a new 'case'.
 ```
 
-``` @step3 @write @wait[2]
+``` @step3 @transform @wait[2]
 The method gets longer. The risk of breaking something grows.
 This feels wrong.
 ```
 
-``` @step3 @write @wait[2]
+``` @step3 @transform @wait[2]
 Just one more case... what's the harm?
 ```
 
-```csharp @step4 @write @wait[5]
+```csharp @step4 @write @wait[5] @fontsize[20]
 public decimal CalculateFee(Order order)
 {
     decimal fee = 0;
@@ -68,8 +64,6 @@ public decimal CalculateFee(Order order)
         case "GiftCard": // The new case is added at the end
             fee = 0; // No fee for gift cards
             break;
-        default:
-            throw new NotSupportedException("Payment method not supported.");
     }
     return fee;
 }
@@ -85,7 +79,7 @@ The goal: Make the code open for extension, but closed for modification.
 A Dictionary-based Strategy Pattern is perfect for this.
 ```
 
-```csharp @step6 @wait[7]
+```csharp @step6 @write  @wait[7] @fontsize[20]
 private static readonly Dictionary<string, Func<Order, decimal>> _feeCalculators =
     new Dictionary<string, Func<Order, decimal>>
     {
@@ -103,9 +97,11 @@ private static readonly Dictionary<string, Func<Order, decimal>> _feeCalculators
         { "GiftCard",     order => 0 },
     };
 ```
+``` @step5 @write @wait[3]
+Then call it in CaclulateFee method
+```
 
-```csharp @step7 @wait[6]
-// Step 2: Replace the entire switch statement with a simple dictionary lookup.
+```csharp @step7 @write  @wait[6]
 public decimal CalculateFee(Order order)
 {
     if (_feeCalculators.TryGetValue(order.PaymentMethod, out var calculateFee))
@@ -117,11 +113,15 @@ public decimal CalculateFee(Order order)
 }
 ```
 
-``` @step8 @write @wait[5]
+``` @step8 @write @wait[2]
 Look at that! Clean, readable, and maintainable.
+```
+``` @step8 @write @wait[3]
 
 To add a new payment method now, the developer only needs to add one line to the dictionary.
 No more scary switch statements!
+```
+``` @step8 @write
 
 The struggle was worth it.
 ```

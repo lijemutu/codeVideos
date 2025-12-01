@@ -52,6 +52,7 @@ class MarkdownCodeParser:
             wait_match = re.search(r'@wait\[([\d.]+)\]', annotations)
             transform_flag = re.search(r'@transform', annotations)
             write_flag = re.search(r'@write', annotations)
+            fontsize_match = re.search(r'@fontsize\[(\d+)\]', annotations)
             
             code_blocks.append({
                 'language': language,  # Can be None for plain text
@@ -60,6 +61,7 @@ class MarkdownCodeParser:
                 'wait': float(wait_match.group(1)) if wait_match else 1.5,
                 'use_transform': bool(transform_flag),
                 'use_write': bool(write_flag),
+                'fontsize': int(fontsize_match.group(1)) if fontsize_match else 24,
                 'highlights': highlight_match.group(1).split(',') if highlight_match else [],
                 'transforms': dict(t.split('->') for t in transform_match.group(1).split(',')) if transform_match else {},
                 'isolate': isolate_match.group(1).split(',') if isolate_match else []
@@ -223,74 +225,58 @@ class MarkdownCodeScene(Scene):
 
         code_mobs = []
         for block in code_blocks:
-            # Check if this is plain text (no language specified)
+            # Get fontsize for this specific block, defaulting to 24
+            font_size = block.get('fontsize', 24)
+
+            # Conditional rendering based on whether a language is specified
             if not block['language']:
-                # Create simple text display for plain text blocks
-                text_lines = block['code'].split('\n')
-                text_group = VGroup()
-                
-                for line in text_lines:
-                    if line.strip():  # Skip empty lines
-                        line_text = Text(line, font_size=font_size, color=WHITE)
-                        text_group.add(line_text)
-                
-                text_group.arrange(DOWN, aligned_edge=LEFT, buff=0.2)
-                text_group.move_to(ORIGIN)
-                code_mobs.append(text_group)
-                continue
+                # It's a text-only slide
+                text_mobject = Text(
+                    block['code'],
+                    font_size=font_size, # Use parsed font size
+                    color=WHITE
+                )
+                text_mobject.move_to(ORIGIN)
+                code_mobs.append(text_mobject)
+                continue # Skip to next block
             
             # Process code blocks with syntax highlighting
-            if block['language']: # It's a code block, apply syntax highlighting
-                try:
-                    lexer = get_lexer_by_name(block['language'])
-                except:
-                    lexer = get_lexer_by_name('text')
+            try:
+                lexer = get_lexer_by_name(block['language'])
+            except:
+                lexer = get_lexer_by_name('text') # Fallback
 
             tokens = list(lex(block['code'], lexer))
             
-            # Debug: Print first few tokens to see what we're getting
-            # print(f"\n=== Lexing {block['language']} code ===")
-            for i, (ttype, tvalue) in enumerate(tokens[:15]):
-                color = get_color_for_token(ttype, tvalue)
-                # print(f"Token {i}: {ttype} = '{tvalue}' -> color: {color}")
-            
-            # Group tokens into lines and apply syntax highlighting
-            lines = VGroup()  # Container for all lines
-            current_line = VGroup()  # Current line being built
+            lines = VGroup()
+            current_line = VGroup()
 
-            # Process each token from the lexer
             for ttype, tvalue in tokens:
-                # Get the appropriate color for this token type
                 color = get_color_for_token(ttype, tvalue)
 
                 if "\n" in tvalue:
-                    # Token contains newline(s) - split and handle line breaks
                     parts = tvalue.split("\n")
                     for i, part in enumerate(parts):
-                        if part:  # Only add non-empty parts (skip empty strings from split)
-                            # Create a colored Text object for this token segment
+                        if part:
                             text_mob = Text(part, font="Consolas", font_size=font_size)
                             text_mob.set_color(color)
                             current_line.add(text_mob)
-                        
                         if i < len(parts) - 1:
-                            # This is a newline boundary - finalize the current line
                             if len(current_line.submobjects) > 0:
-                                # Arrange tokens horizontally with minimal spacing to preserve whitespace
                                 current_line.arrange(RIGHT, buff=0.08, aligned_edge=DOWN)
                             lines.add(current_line)
-                            current_line = VGroup()  # Start a new line
+                            current_line = VGroup()
                 else:
-                    # Token doesn't contain newlines - add to current line
-                    # This includes whitespace tokens, which are crucial for preserving indentation
-                    text_mob = Text(tvalue, font="Consolas", font_size=font_size)
-                    text_mob.set_color(color)
-                    current_line.add(text_mob)
+                    if tvalue:
+                        text_mob = Text(tvalue, font="Consolas", font_size=font_size)
+                        text_mob.set_color(color)
+                        current_line.add(text_mob)
 
             # Finalize the last line if it has content
+            if len(current_line.submobjects) > 0:
+                 current_line.arrange(RIGHT, buff=0.08, aligned_edge=DOWN)
             lines.add(current_line)
             
-            # Arrange all lines vertically with proper alignment
             code = lines.arrange(DOWN, aligned_edge=LEFT, buff=0.15)
             code.move_to(ORIGIN)
             code_mobs.append(code)
@@ -332,3 +318,66 @@ class MarkdownCodeScene(Scene):
                 self.play(FadeOut(current_code), FadeOut(title_mob))
             else:
                 self.play(FadeOut(current_code))
+                
+                
+class InlineMarkdownExample(MarkdownCodeScene):
+    """Example scene with inline markdown content"""
+    
+    def construct(self):
+        markdown_content = """
+# C# LINQ Refactoring
+```csharp @step1
+var numbers = new List<int> { 1, 2, 3, 4, 5 };
+var filtered = numbers.Where(x => x > 2);
+```
+
+```csharp @step2
+var numbers = new List<int> { 1, 2, 3, 4, 5 };
+var result = numbers
+    .Where(x => x > 2)
+    .Select(x => x * 2);
+```
+
+```csharp @step3
+var numbers = new List<int> { 1, 2, 3, 4, 5 };
+var result = numbers
+    .Where(x => x > 2)
+    .Select(x => x * 2)
+    .ToList();
+```
+"""
+        parser = MarkdownCodeParser()
+        parsed_data = parser.parse_markdown(markdown_content)
+        
+        title = parsed_data['title']
+        code_blocks = parsed_data['code_blocks']
+        
+        # Display title if present
+        if title:
+            title_mob = Text(title, font_size=36, color=BLUE)
+            title_mob.to_edge(UP)
+            self.play(Write(title_mob))
+            self.wait(1)
+        
+        # Create and animate code mobjects
+        code_mobs = [Text(block['code'], font="Monospace", font_size=24, color=WHITE) 
+                     for block in code_blocks]
+        
+        for mob in code_mobs:
+            if title:
+                mob.next_to(title_mob, DOWN, buff=0.5)
+            else:
+                mob.move_to(ORIGIN)
+        
+        self.play(FadeIn(code_mobs[0]))
+        self.wait(1)
+        
+        for i in range(len(code_mobs) - 1):
+            self.play(Transform(code_mobs[0], code_mobs[i + 1]), run_time=2)
+            self.wait(1)
+        
+        # Fade out everything
+        if title:
+            self.play(FadeOut(code_mobs[0]), FadeOut(title_mob))
+        else:
+            self.play(FadeOut(code_mobs[0]))
