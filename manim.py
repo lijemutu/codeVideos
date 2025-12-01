@@ -43,7 +43,7 @@ class MarkdownCodeParser:
         for match in matches:
             language = match.group(1) if match.group(1) else None
             annotations = match.group(2)
-            code = match.group(3).strip()
+            code = match.group(3).lstrip('\n').rstrip('\n')
             
             step_match = re.search(r'@step(\d+)', annotations)
             highlight_match = re.search(r'@highlight\[(.*?)\]', annotations)
@@ -240,10 +240,11 @@ class MarkdownCodeScene(Scene):
                 continue
             
             # Process code blocks with syntax highlighting
-            try:
-                lexer = get_lexer_by_name(block['language'], stripall=True)
-            except:
-                lexer = get_lexer_by_name('text', stripall=True)
+            if block['language']: # It's a code block, apply syntax highlighting
+                try:
+                    lexer = get_lexer_by_name(block['language'])
+                except:
+                    lexer = get_lexer_by_name('text')
 
             tokens = list(lex(block['code'], lexer))
             
@@ -253,37 +254,43 @@ class MarkdownCodeScene(Scene):
                 color = get_color_for_token(ttype, tvalue)
                 # print(f"Token {i}: {ttype} = '{tvalue}' -> color: {color}")
             
-            lines = VGroup()
-            current_line = VGroup()
+            # Group tokens into lines and apply syntax highlighting
+            lines = VGroup()  # Container for all lines
+            current_line = VGroup()  # Current line being built
 
+            # Process each token from the lexer
             for ttype, tvalue in tokens:
-                # Get the appropriate color for this token
+                # Get the appropriate color for this token type
                 color = get_color_for_token(ttype, tvalue)
 
                 if "\n" in tvalue:
+                    # Token contains newline(s) - split and handle line breaks
                     parts = tvalue.split("\n")
                     for i, part in enumerate(parts):
-                        if part:
-                            # FIXED: Ensure color is applied correctly
-                            text_mob = Text(part, font="Monospace", font_size=font_size)
+                        if part:  # Only add non-empty parts (skip empty strings from split)
+                            # Create a colored Text object for this token segment
+                            text_mob = Text(part, font="Consolas", font_size=font_size)
                             text_mob.set_color(color)
                             current_line.add(text_mob)
+                        
                         if i < len(parts) - 1:
+                            # This is a newline boundary - finalize the current line
                             if len(current_line.submobjects) > 0:
+                                # Arrange tokens horizontally with minimal spacing to preserve whitespace
                                 current_line.arrange(RIGHT, buff=0.08, aligned_edge=DOWN)
                             lines.add(current_line)
-                            current_line = VGroup()
+                            current_line = VGroup()  # Start a new line
                 else:
-                    if tvalue:
-                        # FIXED: Ensure color is applied correctly
-                        text_mob = Text(tvalue, font="Monospace", font_size=font_size)
-                        text_mob.set_color(color)
-                        current_line.add(text_mob)
+                    # Token doesn't contain newlines - add to current line
+                    # This includes whitespace tokens, which are crucial for preserving indentation
+                    text_mob = Text(tvalue, font="Consolas", font_size=font_size)
+                    text_mob.set_color(color)
+                    current_line.add(text_mob)
 
-            if len(current_line.submobjects) > 0:
-                current_line.arrange(RIGHT, buff=0.08, aligned_edge=DOWN)
+            # Finalize the last line if it has content
             lines.add(current_line)
             
+            # Arrange all lines vertically with proper alignment
             code = lines.arrange(DOWN, aligned_edge=LEFT, buff=0.15)
             code.move_to(ORIGIN)
             code_mobs.append(code)
