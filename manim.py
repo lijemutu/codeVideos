@@ -152,77 +152,7 @@ class MarkdownCodeScene(Scene):
         
         # Manually create syntax-highlighted code from basic Text objects
         font_size = 24
-        # A more complete style map based on VS Code's "Dark+" theme
-        # FIXED: Using color_to_rgb or direct hex colors that ManimGL understands
-        style_map = {
-            Token.Comment:                   "#6A9955",
-            Token.Comment.Single:            "#6A9955",
-            Token.Comment.Multiline:         "#6A9955",
-            Token.Keyword:                   "#569CD6",
-            Token.Keyword.Constant:          "#569CD6",
-            Token.Keyword.Declaration:       "#569CD6",
-            Token.Keyword.Namespace:         "#569CD6",
-            Token.Keyword.Type:              "#569CD6",
-            Token.Name:                      "#9CDCFE",
-            Token.Name.Class:                "#4EC9B0",
-            Token.Name.Function:             "#DCDCAA",
-            Token.Name.Builtin:              "#569CD6",
-            Token.Name.Variable:             "#9CDCFE",
-            Token.Name.Attribute:            "#DCDCAA",
-            Token.Name.Tag:                  "#569CD6",
-            Token.Name.Decorator:            "#DCDCAA",
-            Token.String:                    "#CE9178",
-            Token.String.Double:             "#CE9178",
-            Token.String.Single:             "#CE9178",
-            Token.Number:                    "#B5CEA8",
-            Token.Number.Integer:            "#B5CEA8",
-            Token.Number.Float:              "#B5CEA8",
-            Token.Operator:                  "#D4D4D4",
-            Token.Operator.Word:             "#569CD6",
-            Token.Punctuation:               "#D4D4D4",
-            Token.Generic.Heading:           "#FFFFFF",
-            Token.Generic.Subheading:        "#FFFFFF",
-            Token.Generic.Emph:              "#D4D4D4",
-            Token.Generic.Strong:            "#D4D4D4",
-            Token.Error:                     "#F44747",
-            Token.Text:                      "#D4D4D4",
-        }
-
-        # Common LINQ and C# extension methods to highlight
-        linq_methods = {
-            'Where', 'Select', 'SelectMany', 'OrderBy', 'OrderByDescending',
-            'ThenBy', 'ThenByDescending', 'GroupBy', 'Join', 'GroupJoin',
-            'First', 'FirstOrDefault', 'Last', 'LastOrDefault', 'Single',
-            'SingleOrDefault', 'Any', 'All', 'Count', 'Sum', 'Average',
-            'Min', 'Max', 'Take', 'Skip', 'TakeWhile', 'SkipWhile',
-            'Distinct', 'Union', 'Intersect', 'Except', 'Concat',
-            'Aggregate', 'ToList', 'ToArray', 'ToDictionary', 'ToLookup',
-            'AsEnumerable', 'AsQueryable', 'Cast', 'OfType', 'Zip',
-            'Contains', 'ElementAt', 'ElementAtOrDefault', 'DefaultIfEmpty',
-            'Range', 'Repeat', 'Empty', 'Reverse'
-        }
-
-        def get_color_for_token(ttype, tvalue):
-            """Get color for a token type, checking parent types if needed"""
-            # Special handling for LINQ methods in C#
-            if block['language'].lower() in ['csharp', 'c#', 'cs']:
-                if tvalue in linq_methods:
-                    return "#DCDCAA"  # Function color (yellow)
-            
-            # First check exact match
-            if ttype in style_map:
-                return style_map[ttype]
-            
-            # Walk up the token type hierarchy
-            current = ttype
-            while current.parent is not None:
-                current = current.parent
-                if current in style_map:
-                    return style_map[current]
-            
-            # Default color
-            return "#D4D4D4"
-
+        
         code_mobs = []
         for block in code_blocks:
             # Get fontsize for this specific block, defaulting to 24
@@ -233,53 +163,34 @@ class MarkdownCodeScene(Scene):
                 # It's a text-only slide
                 text_mobject = Text(
                     block['code'],
-                    font_size=font_size, # Use parsed font size
+                    font_size=font_size,
                     color=WHITE
                 )
                 text_mobject.move_to(ORIGIN)
                 code_mobs.append(text_mobject)
-                continue # Skip to next block
+                continue
             
-            # Process code blocks with syntax highlighting
+            # Use Code class which handles lexing, tokenizing, and syntax highlighting internally
             try:
-                lexer = get_lexer_by_name(block['language'])
-            except:
-                lexer = get_lexer_by_name('text') # Fallback
-
-            tokens = list(lex(block['code'], lexer))
-            
-            lines = VGroup()
-            current_line = VGroup()
-
-            for ttype, tvalue in tokens:
-                color = get_color_for_token(ttype, tvalue)
-
-                if "\n" in tvalue:
-                    parts = tvalue.split("\n")
-                    for i, part in enumerate(parts):
-                        if part:
-                            text_mob = Text(part, font="Consolas", font_size=font_size)
-                            text_mob.set_color(color)
-                            current_line.add(text_mob)
-                        if i < len(parts) - 1:
-                            if len(current_line.submobjects) > 0:
-                                current_line.arrange(RIGHT, buff=0.08, aligned_edge=DOWN)
-                            lines.add(current_line)
-                            current_line = VGroup()
-                else:
-                    if tvalue:
-                        text_mob = Text(tvalue, font="Consolas", font_size=font_size)
-                        text_mob.set_color(color)
-                        current_line.add(text_mob)
-
-            # Finalize the last line if it has content
-            if len(current_line.submobjects) > 0:
-                 current_line.arrange(RIGHT, buff=0.08, aligned_edge=DOWN)
-            lines.add(current_line)
-            
-            code = lines.arrange(DOWN, aligned_edge=LEFT, buff=0.15)
-            code.move_to(ORIGIN)
-            code_mobs.append(code)
+                code_obj = Code(
+                    block['code'],
+                    language=block['language'],
+                    font="Consolas",
+                    font_size=font_size,
+                    code_style="monokai"
+                )
+                code_obj.move_to(ORIGIN)
+                code_mobs.append(code_obj)
+            except Exception as e:
+                print(f"Error creating Code object: {e}")
+                # Fallback to plain text if Code fails
+                text_mobject = Text(
+                    block['code'],
+                    font_size=font_size,
+                    color=WHITE
+                )
+                text_mobject.move_to(ORIGIN)
+                code_mobs.append(text_mobject)
         
         # Animate the code blocks
         if code_mobs:

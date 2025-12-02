@@ -47,7 +47,7 @@ This feels wrong.
 Just one more case... what's the harm?
 ```
 
-```csharp @step4 @write @wait[5] @fontsize[20]
+```csharp @step4 @write @wait[5] @fontsize[21]
 public decimal CalculateFee(Order order)
 {
     decimal fee = 0;
