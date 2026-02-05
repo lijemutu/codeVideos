@@ -81,6 +81,7 @@ class MarkdownCodeScene(Scene):
             markdown_path: Path to the markdown file (absolute or relative)
             **kwargs: Additional arguments passed to Scene
         """
+        
         self.markdown_path = markdown_path
         super().__init__(**kwargs)
     
@@ -141,7 +142,7 @@ class MarkdownCodeScene(Scene):
         
         title_mob = None
         if title:
-            title_mob = Text(title).to_edge(UP)
+            title_mob = Text(title,font_size=18).to_edge(UP)
             self.play(Write(title_mob))
         
         if not code_blocks:
@@ -151,12 +152,12 @@ class MarkdownCodeScene(Scene):
             return
         
         # Manually create syntax-highlighted code from basic Text objects
-        font_size = 24
+        font_size = 12
         
         code_mobs = []
         for block in code_blocks:
-            # Get fontsize for this specific block, defaulting to 24
-            font_size = block.get('fontsize', 24)
+            # Get fontsize for this specific block, defaulting to 12
+            font_size = block.get('fontsize', 12)
 
             # Conditional rendering based on whether a language is specified
             if not block['language']:
@@ -164,7 +165,8 @@ class MarkdownCodeScene(Scene):
                 text_mobject = Text(
                     block['code'],
                     font_size=font_size,
-                    color=WHITE
+                    color=WHITE,
+                    line_width = 2
                 )
                 text_mobject.move_to(ORIGIN)
                 code_mobs.append(text_mobject)
@@ -177,7 +179,8 @@ class MarkdownCodeScene(Scene):
                     language=block['language'],
                     font="Consolas",
                     font_size=font_size,
-                    code_style="monokai"
+                    code_style="monokai",
+                    line_width = 3
                 )
                 code_obj.move_to(ORIGIN)
                 code_mobs.append(code_obj)
